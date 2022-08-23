@@ -37,6 +37,8 @@ describe("Staking tests", function () {
             rewardTokenInstance.address
         );
 
+        await rewardTokenInstance.connect(deployer).transfer(stakingInstance.address, ethers.utils.parseEther("1000000"));
+
         stakeAmount = ethers.utils.parseEther("100000");
     });
 
@@ -46,25 +48,39 @@ describe("Staking tests", function () {
         const startingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
         console.log(`Starting Earned: ${startingEarned}`);
 
+        await fastForward(oneMonth);
+
         const endingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
         console.log(`Ending Earned: ${endingEarned}`);
+    });
+    it("can claim rewards", async () => {
+        await stakingTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
+        await rewardTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
+        await stakingInstance.connect(deployer).stake(stakeAmount, fourMonths);
+        const startingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
+        console.log(`Starting Earned: ${startingEarned}`);
+
+        await fastForward(oneMonth);
+
+        const endingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
+        console.log(`Ending Earned: ${endingEarned}`);
+        let balanceBefore = await rewardTokenInstance.balanceOf(deployerAddress);
+
+        await stakingInstance.connect(deployer).claimReward();
+
+        let balanceAfter = await rewardTokenInstance.balanceOf(deployerAddress);
+
+        expect(balanceAfter).to.equal(balanceBefore + endingEarned);
     });
     it("can withdraw after one month", async () => {
         await stakingTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
         await rewardTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
         await stakingInstance.connect(deployer).stake(stakeAmount, oneMonth);
 
-        let CurrentTime = await currentTime(); 
-        console.log("Current Time: " + CurrentTime);
-        let currentPlusOne = CurrentTime + oneMonth;
-        console.log("Current Time + 1m: " + currentPlusOne);
-
         await expect(stakingInstance.connect(deployer).withdraw(stakeAmount))
             .to.be.revertedWith("CANT WITHDRAW");
 
         await fastForward(oneMonth);
-        CurrentTime = await currentTime(); 
-        console.log("1m in future: " + CurrentTime);
 
         const balanceBefore = await stakingTokenInstance.balanceOf(deployer.address);
         console.log(`deployer Balance Before: ${balanceBefore}`);
