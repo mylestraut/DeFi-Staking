@@ -1,10 +1,7 @@
 const { expect } = require("chai");
 const { utils } = require("ethers");
 const { ethers} = require("hardhat");
-const { moveBlocks } = require("../utils/move-blocks");
-const { moveTime } = require("../utils/move-time");
 const { currentTime, fastForward } = require("../utils/TestUtils");
-// const { oneMonth, fourMonths, oneYear } = require("../utils/TEST");
 
 const oneMonth = 2419200;
 const fourMonths = 9676800;
@@ -52,18 +49,22 @@ describe("Staking tests", function () {
 
         const endingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
         console.log(`Ending Earned: ${endingEarned}`);
+
+        await stakingTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
+
+        expect(await stakingInstance.connect(deployer).stake(stakeAmount, oneMonth))
+            .to.emit(stakingInstance, "Staked")
+            .withArgs(deployerAddress, stakeAmount, oneMonth);
     });
     it("can claim rewards", async () => {
         await stakingTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
         await rewardTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
         await stakingInstance.connect(deployer).stake(stakeAmount, fourMonths);
-        const startingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
-        console.log(`Starting Earned: ${startingEarned}`);
 
         await fastForward(oneMonth);
 
         const endingEarned = await stakingInstance.connect(deployer).earned(deployer.address);
-        console.log(`Ending Earned: ${endingEarned}`);
+
         let balanceBefore = await rewardTokenInstance.balanceOf(deployerAddress);
 
         await stakingInstance.connect(deployer).claimReward();
@@ -71,6 +72,10 @@ describe("Staking tests", function () {
         let balanceAfter = await rewardTokenInstance.balanceOf(deployerAddress);
 
         expect(balanceAfter).to.equal(balanceBefore + endingEarned);
+
+        expect(await stakingInstance.connect(deployer).claimReward())
+            .to.emit(stakingInstance, "RewardClaimed")
+            .withArgs(deployerAddress, endingEarned);
     });
     it("can withdraw after one month", async () => {
         await stakingTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
@@ -83,12 +88,10 @@ describe("Staking tests", function () {
         await fastForward(oneMonth);
 
         const balanceBefore = await stakingTokenInstance.balanceOf(deployer.address);
-        console.log(`deployer Balance Before: ${balanceBefore}`);
 
         await stakingInstance.connect(deployer).withdraw(stakeAmount);
 
         const balanceAfter = await stakingTokenInstance.balanceOf(deployer.address);
-        console.log(`deployer Balance After: ${balanceAfter}`);
 
         expect(balanceAfter).to.equal(balanceBefore.add(stakeAmount));
     });
@@ -105,12 +108,10 @@ describe("Staking tests", function () {
         await fastForward(fourMonths);
 
         const balanceBefore = await stakingTokenInstance.balanceOf(deployer.address);
-        console.log(`deployer Balance Before: ${balanceBefore}`);
 
         await stakingInstance.connect(deployer).withdraw(stakeAmount);
 
         const balanceAfter = await stakingTokenInstance.balanceOf(deployer.address);
-        console.log(`deployer Balance After: ${balanceAfter}`);
 
         expect(balanceAfter).to.equal(balanceBefore.add(stakeAmount));
     });
@@ -125,13 +126,21 @@ describe("Staking tests", function () {
         await fastForward(oneYear);
 
         const balanceBefore = await stakingTokenInstance.balanceOf(deployer.address);
-        console.log(`deployer Balance Before: ${balanceBefore}`);
 
         await stakingInstance.connect(deployer).withdraw(stakeAmount);
 
         const balanceAfter = await stakingTokenInstance.balanceOf(deployer.address);
-        console.log(`deployer Balance After: ${balanceAfter}`);
 
         expect(balanceAfter).to.equal(balanceBefore.add(stakeAmount));
+    });
+    it("withdraw emits event", async () => {
+        await stakingTokenInstance.connect(deployer).approve(stakingInstance.address, stakeAmount);
+        await stakingInstance.connect(deployer).stake(stakeAmount, oneMonth);
+
+        await fastForward(oneMonth);
+
+        expect(await stakingInstance.connect(deployer).withdraw(stakeAmount))
+            .to.emit(stakingInstance, "Withdrawn")
+            .withArgs(deployerAddress, stakeAmount);
     });
 });
